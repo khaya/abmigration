@@ -9,6 +9,10 @@ import java.sql.Date;
 /**
  *
  * @author khaya
+ *
+ * AccountDateSoldPair class used to group Annuities by
+ * AccountId and DateSold
+ *
  */
 public class AccountDateSoldPair {
 
@@ -64,6 +68,4 @@ public class AccountDateSoldPair {
         hash = 31 * hash + (this.dateSold != null ? this.dateSold.hashCode() : 0);
         return hash;
     }
-
-    
 }
