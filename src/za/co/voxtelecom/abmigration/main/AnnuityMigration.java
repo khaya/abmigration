@@ -20,8 +20,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+import java.util.logging.FileHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 import za.co.voxtelecom.abmigration.util.AccountDateSoldPair;
 import za.co.voxtelecom.abmigration.util.AccountServiceRequestNoPair;
 
@@ -57,6 +59,32 @@ public class AnnuityMigration {
     private String voxcontractId = null;
     private String voxcontractInfoId = null;
     private String d = null;
+    private static Logger importLogger;
+    private static Logger errorLogger;
+    private static FileHandler importHandler;
+    private static FileHandler errorHandler;
+    private Integer masterNumberId;
+
+    static {
+        System.out.println("Setting up loggers");
+        try {
+            errorHandler = new FileHandler("/home/khaya/Desktop/errors.log", true);
+            importHandler = new FileHandler("/home/khaya/Desktop/imports.log", true);
+            errorHandler.setFormatter(new SimpleFormatter());
+            importHandler.setFormatter(new SimpleFormatter());
+
+            errorLogger = Logger.getAnonymousLogger();
+            importLogger = Logger.getAnonymousLogger();
+
+            errorLogger.addHandler(errorHandler);
+            importLogger.addHandler(importHandler);
+            //
+        } catch (IOException ex) {
+            Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (SecurityException ex) {
+            Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
 
     /**
      * @param args the command line arguments
@@ -93,8 +121,10 @@ public class AnnuityMigration {
             connection = DriverManager.getConnection(url, prop);
         } catch (FileNotFoundException ex) {
             Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
+            errorLogger.info("FileNotFoundException getting connection for database : " + fileName);
         } catch (Exception ex) {
             Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
+            errorLogger.info("Exception getting connection for database : " + fileName);
         } finally {
             try {
                 is.close();
@@ -115,7 +145,7 @@ public class AnnuityMigration {
                     createVoxcontractPerAccountIdProductId();
                 } else if (criteria.equals("b")) {
                     System.out.println("Creating Voxcontracts Using ServiceRequestNo");
-                    //select AccountId,ServiceRequestNo from AnnuityBilling where  ProductId<>'1888' and ( ServiceRequestNo<>'')
+                    //select AccountId,ServiceRequestNo from AnnuityBilling where  ProductId <>'1888' and ( ServiceRequestNo<>'')
                     bigBluePreparedStatement = bigBlueConnection.prepareStatement("select * from AnnuityBilling where ServiceRequestNo<>'' and ProductId<>'1888'");
                     bigBlueResultSet = bigBluePreparedStatement.executeQuery();
                     createVoxcontractPerAccountIdServiceRequestNo();
@@ -123,11 +153,12 @@ public class AnnuityMigration {
                     System.out.println("Creating Voxcontracts Using DateSold");
                     bigBluePreparedStatement = bigBlueConnection.prepareStatement("select * from AnnuityBilling where (ServiceRequestNo is Null or ServiceRequestNo='') and ProductId<>'1888'");
                     bigBlueResultSet = bigBluePreparedStatement.executeQuery();
-                    createVoxcontractPerAccountIdCommencementDate();
+                    createVoxcontractPerAccountIdDateSold();
                 }
 
             } catch (SQLException ex) {
                 Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
+                errorLogger.info("SQLException selecting annuities : " + ex);
             }
         }
     }
@@ -147,6 +178,7 @@ public class AnnuityMigration {
             voxcontractHasProductPreparedStatement = voxzalConnection.prepareStatement("INSERT INTO voxcontract_has_product(voxcontract_id,voxcontract_product_id,billing_info_id)  VALUES(?,?,?)");
         } catch (SQLException ex) {
             Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
+            errorLogger.info("SQLException initialising statements ");
         }
     }
 
@@ -175,6 +207,7 @@ public class AnnuityMigration {
                 }
             } catch (SQLException ex) {
                 Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, code + "\for SalesMan " + salesmanId, ex);
+                errorLogger.info("SQLException  in getting Salesman : " + salesmanId + " for MasterNumber " + masterNumberId);
             } finally {
                 close(bigBlueTempResultSet);
                 close(bigBlueTempPreparedStatement);
@@ -202,6 +235,7 @@ public class AnnuityMigration {
                 cancellationReason = voxzalTempResultSet.getString("cancellation_reason_id");
             } catch (SQLException ex) {
                 Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
+                errorLogger.info("SQLException  in getting cancellation reason : " + cancellationReasonId + " for MasterNumber " + masterNumberId);
             } finally {
                 close(bigBlueTempResultSet);
                 close(bigBlueTempPreparedStatement);
@@ -215,13 +249,14 @@ public class AnnuityMigration {
 
     private String getVoxcontractDataSource(Integer sourceDatabaseId) {
         String voxcontractDatasourceId = null;
+        String sourceOfData = null;
         if (sourceDatabaseId != 0) {
             try {
                 bigBlueTempPreparedStatement = bigBlueConnection.prepareStatement("select SourceOfData from SourceDatabase where SourceDatabaseID=?");
                 bigBlueTempPreparedStatement.setInt(1, sourceDatabaseId);
                 bigBlueTempResultSet = bigBlueTempPreparedStatement.executeQuery();
                 bigBlueTempResultSet.next();
-                String sourceOfData = bigBlueTempResultSet.getString("SourceOfData");
+                sourceOfData = bigBlueTempResultSet.getString("SourceOfData");
                 voxzalTempPreparedStatement = voxzalConnection.prepareStatement("select id from voxcontract_datasource where name=?");
                 voxzalTempPreparedStatement.setString(1, sourceOfData);
                 voxzalTempResultSet = voxzalTempPreparedStatement.executeQuery();
@@ -229,6 +264,7 @@ public class AnnuityMigration {
                 voxcontractDatasourceId = voxzalTempResultSet.getString("id");
             } catch (SQLException ex) {
                 Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
+                errorLogger.info("SQLException  in getting Voxcontract Data Source : " + sourceDatabaseId + "\t" + sourceOfData + " for MasterNumber " + masterNumberId);
             } finally {
                 close(bigBlueTempResultSet);
                 close(bigBlueTempPreparedStatement);
@@ -243,13 +279,14 @@ public class AnnuityMigration {
 
     private String getVoxcontractSource(Integer sourceId) {
         String voxcontractSourceId = null;
+        String sourceOfBusiness = null;
         if (sourceId != 0) {
             try {
                 bigBlueTempPreparedStatement = bigBlueConnection.prepareStatement("select SourceOfBusiness from Source where SourceID=?");
                 bigBlueTempPreparedStatement.setInt(1, sourceId);
                 bigBlueTempResultSet = bigBlueTempPreparedStatement.executeQuery();
                 bigBlueTempResultSet.next();
-                String sourceOfBusiness = bigBlueTempResultSet.getString("SourceOfBusiness");
+                sourceOfBusiness = bigBlueTempResultSet.getString("SourceOfBusiness");
                 voxzalTempPreparedStatement = voxzalConnection.prepareStatement("select SourceID from voxcontract_source where SourceOfBusiness=?");
                 voxzalTempPreparedStatement.setString(1, sourceOfBusiness);
                 voxzalTempResultSet = voxzalTempPreparedStatement.executeQuery();
@@ -257,6 +294,7 @@ public class AnnuityMigration {
                 voxcontractSourceId = voxzalTempResultSet.getString("SourceID");
             } catch (SQLException ex) {
                 Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
+                errorLogger.info("SQLException  in getting Voxcontract Source  : " + sourceId + "\t " + sourceOfBusiness + " for MasterNumber " + masterNumberId);
             } finally {
                 close(bigBlueTempResultSet);
                 close(bigBlueTempPreparedStatement);
@@ -281,6 +319,7 @@ public class AnnuityMigration {
                 bigBlueTempResultSet.next();
                 paymentOption = bigBlueTempResultSet.getString("PaymentOption");
                 paymentOption = paymentOption.equals("Credit Cards") ? "Credit Card" : paymentOption;
+                paymentOption = paymentOption.equals("Cheque/EFT") ? "Cheque" : paymentOption;
                 paymentOption = paymentOption.equals("Prepaids") ? "PrePaid" : paymentOption;
                 voxzalTempPreparedStatement = voxzalConnection.prepareStatement("select id from payment_type where type_name=?");
                 voxzalTempPreparedStatement.setString(1, paymentOption);
@@ -289,6 +328,7 @@ public class AnnuityMigration {
                 paymentTypeId = voxzalTempResultSet.getString("id");
             } catch (SQLException ex) {
                 Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, paymentOption, ex);
+                errorLogger.info("SQLException  in getting Payment Type : " + paymentOptionId + " for MasterNumber " + masterNumberId);
             } finally {
                 close(bigBlueTempResultSet);
                 close(bigBlueTempPreparedStatement);
@@ -316,6 +356,7 @@ public class AnnuityMigration {
                 profitCenterId = voxzalTempResultSet.getString("profit_center_id");
             } catch (SQLException ex) {
                 Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
+                errorLogger.info("SQLException  in getting Profit Center : " + profitCentreId + " for MasterNumber " + masterNumberId);
             } finally {
                 close(bigBlueTempResultSet);
                 close(bigBlueTempPreparedStatement);
@@ -344,6 +385,7 @@ public class AnnuityMigration {
                 rid = voxzalTempResultSet.getString("region_id");
             } catch (SQLException ex) {
                 Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
+                errorLogger.info("SQLException  in getting Region : " + regionId + " for MasterNumber " + masterNumberId);
             } finally {
                 close(bigBlueTempResultSet);
                 close(bigBlueTempPreparedStatement);
@@ -395,6 +437,7 @@ public class AnnuityMigration {
 
         } catch (SQLException ex) {
             Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, pastelCode, ex);
+            errorLogger.info("SQLException  in getting Global Customer : " + accountId + " for MasterNumber " + masterNumberId);
         } finally {
             close(bigBlueTempResultSet);
             close(bigBlueTempPreparedStatement);
@@ -432,16 +475,16 @@ public class AnnuityMigration {
 
     private boolean getBoolean(String b) {
         boolean booleanResult = false;
-        if (b!= null && !b.equals("0")) {
+        if (b != null && !b.equals("0")) {
             booleanResult = true;
         }
         return booleanResult;
     }
 
-    private Double getPreviousMasterNumber(String oldMasterNumber) {
-        Double previousMasterNumber = 0.0d;
+    private Integer getPreviousMasterNumber(String oldMasterNumber) {
+        Integer previousMasterNumber = 0;
         try {
-            previousMasterNumber = Double.valueOf(oldMasterNumber);
+            previousMasterNumber = Integer.valueOf(oldMasterNumber);
         } catch (Exception ex) {
             //TODO log this exception so that invalid master numbers can be tracked
         }
@@ -452,6 +495,7 @@ public class AnnuityMigration {
     }
 
     private void addGlobalCustomer(String customerId, String customerName, String accountCode) {
+        importLogger.info("Adding a New Global Customer " + customerName + "for Master Number " + masterNumberId);
         try {
             voxzalGlobalCustomerPreparedStatement = voxzalConnection.prepareStatement("insert into global_customer(customer_id,customer_name,account_code,customer_global_guid,system_id) values(?,?,?,?,?)");
             voxzalGlobalCustomerPreparedStatement.setString(1, customerId);
@@ -462,6 +506,7 @@ public class AnnuityMigration {
             voxzalGlobalCustomerPreparedStatement.executeUpdate();
         } catch (SQLException ex) {
             Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
+            errorLogger.info("SQLException  in adding Global Customer : " + customerId + " for MasterNumber " + masterNumberId);
         } finally {
             try {
                 voxzalGlobalCustomerPreparedStatement.close();
@@ -480,7 +525,7 @@ public class AnnuityMigration {
             bigBlueProductResultSet = bigBlueProductPreparedStatement.executeQuery();
             bigBlueProductResultSet.next();
             String bpid = getId();
-            desc = getName(bigBlueProductResultSet.getString("Description"),pc);
+            desc = getName(bigBlueProductResultSet.getString("Description"), pc);
             voxzalBaseProductPreparedStatement = voxzalConnection.prepareStatement("insert into base_product(base_product_id,product_code,name,description,is_active,plan_type_id,supplier_cost,recommended_core_cost,recommended_selling_price,recommended_billing_type_guid,last_updated) values(?,?,?,?,?,?,?,?,?,?,now())");
 
             voxzalBaseProductPreparedStatement.setString(1, bpid);
@@ -532,9 +577,9 @@ public class AnnuityMigration {
         }
     }
 
-    private String getName(String desc,String productCode) {
+    private String getName(String desc, String productCode) {
         if (desc != null) {
-            return desc =  (desc.length() > 100) ? desc.substring(99) : desc;
+            return desc = (desc.length() > 100) ? desc.substring(99) : desc;
         } else {
             return productCode;
         }
@@ -652,9 +697,10 @@ public class AnnuityMigration {
             voxcontractItemBillingInfoPreparedStatement.setBoolean(9, getBoolean(resultSet.getString("billable"))); //is_billable
             voxcontractItemBillingInfoPreparedStatement.setBoolean(10, getBoolean(resultSet.getString("proratabilled"))); //is_prorata
             voxcontractItemBillingInfoPreparedStatement.setDouble(11, 0.0d); //lob_price
-            voxcontractItemBillingInfoPreparedStatement.setDouble(12, resultSet.getDouble("masternumberid")); //master_number
+
+            voxcontractItemBillingInfoPreparedStatement.setInt(12, getMasterNumberId(resultSet.getInt("masternumberid"))); //master_number
             voxcontractItemBillingInfoPreparedStatement.setString(13, resultSet.getString("notes")); //note
-            voxcontractItemBillingInfoPreparedStatement.setDouble(14, getPreviousMasterNumber(resultSet.getString("oldmasternumber"))); //previous_master_number
+            voxcontractItemBillingInfoPreparedStatement.setInt(14, getPreviousMasterNumber(resultSet.getString("oldmasternumber"))); //previous_master_number
             voxcontractItemBillingInfoPreparedStatement.setString(15, null); //salesman_id
             voxcontractItemBillingInfoPreparedStatement.setDouble(16, resultSet.getDouble("billings"));//selling_price
             voxcontractItemBillingInfoPreparedStatement.setDouble(17, resultSet.getDouble("setupfee"));//setup_fee
@@ -829,7 +875,7 @@ public class AnnuityMigration {
         }
     }
 
-    public void createVoxcontractPerAccountIdCommencementDate() {
+    public void createVoxcontractPerAccountIdDateSold() {
         List<AccountDateSoldPair> list = new ArrayList<AccountDateSoldPair>();
         Set<AccountDateSoldPair> accountDateSoldPairs = new HashSet<AccountDateSoldPair>();
         Set<AccountServiceRequestNoPair> firstHalf = new HashSet<AccountServiceRequestNoPair>();
@@ -887,5 +933,10 @@ public class AnnuityMigration {
                 Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
+    }
+
+    private Integer getMasterNumberId(Integer mn) {
+        masterNumberId = mn;
+        return masterNumberId;
     }
 }
