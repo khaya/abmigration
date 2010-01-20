@@ -77,13 +77,13 @@ public class UpdateCustomers {
     }
 
     public static void main(String[] args) {
-      
+
         UpdateCustomers uc = new UpdateCustomers();
         uc.voxzalConnection = uc.getConnection("voxzal.config");
         if (uc.voxzalConnection != null) {
             try {
                 uc.initilisePreparedStatements();
-                
+
                 while (uc.voxzalSelectResultSet.next()) {
                     uc.setPreparedStatementsValues();
                 }
