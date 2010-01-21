@@ -65,6 +65,7 @@ public class AnnuityMigration {
     private PreparedStatement voxzalBaseProductPreparedStatement;
     private PreparedStatement voxzalLobProductPreparedStatement;
     private PreparedStatement voxzalGlobalCustomerPreparedStatement;
+    private PreparedStatement voxzalReadGlobalCustomerIdPreparedStatement;
     private PreparedStatement voxzalReadGlobalCustomerPreparedStatement;
     private ResultSet voxzalTempResultSet;
     private String voxcontractId = null;
@@ -118,8 +119,23 @@ public class AnnuityMigration {
         if (am.bigBlueConnection != null) {
 
             am.initialiseStatements();
+
+            if (am.batchNumber.equals("all")) {
+                am.batchNumber = "1";
+                am.getAnnuities(args[0]);
+                 am.executeBatches();
+                 am.batchNumber = "2";
+                am.getAnnuities(args[0]);
+                 am.executeBatches();
+                 am.batchNumber = "3";
+                am.getAnnuities(args[0]);
+                 am.executeBatches();
+
+            } else {
+
             am.getAnnuities(args[0]);
-            am.executeBatches();
+
+            am.executeBatches();}
         }
     }
 
@@ -221,6 +237,7 @@ public class AnnuityMigration {
             voxzalProfitPreparedStatement = voxzalConnection.prepareStatement("select profit_center_id from profit_center where name like ?");
             voxzalRegionPreparedStatement = voxzalConnection.prepareStatement("select region_id from region where name=?");
             voxzalReadGlobalCustomerPreparedStatement = voxzalConnection.prepareStatement("select customer_id from global_customer where account_code=?");
+            voxzalReadGlobalCustomerIdPreparedStatement = voxzalConnection.prepareStatement("select customer_id from global_customer where customer_id=?");
             voxzalLobPreparedStatement = voxzalConnection.prepareStatement("select base_product_id,lob_id,lob_product_id,name from lob_product where lob_product_code=?");
             voxzalPlanTypePreparedStatement = voxzalConnection.prepareStatement("select plan_type_id from base_product where base_product_id=?");
 
@@ -462,8 +479,8 @@ public class AnnuityMigration {
                 if (voxzalTempResultSet.isFirst()) {
                     // if there is a matching customer search for the global customer and update it
                     customerId = voxzalTempResultSet.getString("id");
-                    voxzalReadGlobalCustomerPreparedStatement.setString(1, customerId);
-                    voxzalTempResultSet = voxzalReadGlobalCustomerPreparedStatement.executeQuery();
+                    voxzalReadGlobalCustomerIdPreparedStatement.setString(1, customerId);
+                    voxzalTempResultSet = voxzalReadGlobalCustomerIdPreparedStatement.executeQuery();
                     voxzalTempResultSet.next();
                     if (voxzalTempResultSet.isFirst()) {
                         //if global customer exists update the global customer
@@ -846,6 +863,7 @@ public class AnnuityMigration {
         close(voxzalLobPreparedStatement);
         close(voxzalPlanTypePreparedStatement);
         close(voxzalReadGlobalCustomerPreparedStatement);
+        close(voxzalReadGlobalCustomerIdPreparedStatement);
 
         try {
             if (bigBlueConnection != null) {
@@ -1059,8 +1077,7 @@ public class AnnuityMigration {
                     bigBlueSubQueryResultSet.close();
                 }
                 bigBlueSubQueryPreparedStatement.close();
-                bigBlueConnection.close();
-                executeBatches();
+
             } catch (SQLException ex) {
                 Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
             }
