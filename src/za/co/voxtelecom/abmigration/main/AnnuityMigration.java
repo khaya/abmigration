@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package za.co.voxtelecom.abmigration.main;
 
 import com.tcm.utils.guid.GuidGenerator;
@@ -37,9 +33,7 @@ public class AnnuityMigration {
     private Connection bigBlueConnection;
     private Connection voxzalConnection;
     private PreparedStatement bigBluePreparedStatement;
-    private PreparedStatement voxzalPreparedStatement;
     private ResultSet bigBlueResultSet;
-    private ResultSet voxzalResultSet;
     private PreparedStatement voxcontractPreparedStatement;
     private PreparedStatement voxcontractInfoPreparedStatement;
     private PreparedStatement voxcontractItemBillingInfoPreparedStatement;
@@ -47,15 +41,31 @@ public class AnnuityMigration {
     private PreparedStatement voxcontractHasProductPreparedStatement;
     private PreparedStatement bigBlueSubQueryPreparedStatement;
     private ResultSet bigBlueSubQueryResultSet;
-    private PreparedStatement bigBlueTempPreparedStatement;
+    PreparedStatement bigBlueCustomerPreparedStatement;
+    PreparedStatement bigBlueCancelReasonPreparedStatement;
+    PreparedStatement bigBlueSalesStaffPreparedStatement;
+    PreparedStatement bigBlueSourceBusinessPreparedStatement;
+    PreparedStatement bigBlueDataSourceDataPreparedStatement;
+    PreparedStatement bigBluePaymentPreparedStatement;
+    PreparedStatement bigBlueProfiitPreparedStatement;
+    PreparedStatement bigBlueRegionPreparedStatement;
+    PreparedStatement bigBlueProductPreparedStatement;
+    PreparedStatement voxzalCustomerPreparedStatement;
+    PreparedStatement voxzalUsrPreparedStatement;
+    PreparedStatement voxzalDataSourcePreparedStatement;
+    PreparedStatement voxzalCancelPreparedStatement;
+    PreparedStatement voxzalSourcePreparedStatement;
+    PreparedStatement voxzalPaymentPreparedStatement;
+    PreparedStatement voxzalProfitPreparedStatement;
+    PreparedStatement voxzalRegionPreparedStatement;
+    PreparedStatement voxzalLobPreparedStatement;
     private ResultSet bigBlueTempResultSet;
     private ResultSet bigBlueProductResultSet;
-    private PreparedStatement bigBlueProductPreparedStatement;
-    private PreparedStatement voxzalTempPreparedStatement;
-    private PreparedStatement voxzalCustomerPreparedStatement;
+    private PreparedStatement voxzalPlanTypePreparedStatement;
     private PreparedStatement voxzalBaseProductPreparedStatement;
     private PreparedStatement voxzalLobProductPreparedStatement;
     private PreparedStatement voxzalGlobalCustomerPreparedStatement;
+    private PreparedStatement voxzalReadGlobalCustomerPreparedStatement;
     private ResultSet voxzalTempResultSet;
     private String voxcontractId = null;
     private String voxcontractInfoId = null;
@@ -71,8 +81,8 @@ public class AnnuityMigration {
     static {
         System.out.println("Setting up loggers");
         try {
-            errorHandler = new FileHandler("/home/khaya/Desktop/errors.log", true);
-            importHandler = new FileHandler("/home/khaya/Desktop/imports.log", true);
+            errorHandler = new FileHandler("/home/pault/Desktop/errors.log", true);
+            importHandler = new FileHandler("/home/pault/Desktop/imports.log", true);
             errorHandler.setFormatter(new SimpleFormatter());
             importHandler.setFormatter(new SimpleFormatter());
 
@@ -100,12 +110,15 @@ public class AnnuityMigration {
         AnnuityMigration am = new AnnuityMigration();
         am.bigBlueConnection = am.getConnection("bigblue.config");
         am.voxzalConnection = am.getConnection("voxzal.config");
-        am.batchNumber = args[1];
+        if (args.length > 1) {
+            am.batchNumber = args[1];
+        } else {
+            am.batchNumber = "all";
+        }
         if (am.bigBlueConnection != null) {
+
             am.initialiseStatements();
             am.getAnnuities(args[0]);
-
-            /// am.createVoxcontractPerAccountIdProductId();
             am.executeBatches();
         }
     }
@@ -145,13 +158,15 @@ public class AnnuityMigration {
             try {
                 if (criteria.equals("a")) {
                     System.out.println("Creating Voxcontracts Using ProductId");
+                    long start = System.currentTimeMillis();
                     bigBluePreparedStatement = bigBlueConnection.prepareStatement("select * from AnnuityBilling where ProductID='1888'");
                     bigBlueResultSet = bigBluePreparedStatement.executeQuery();
+                    System.out.println("Time to get result set from bigblue" + (System.currentTimeMillis() - start) + "ms");
                     createVoxcontractPerAccountIdProductId();
                 } else if (criteria.equals("b")) {
                     System.out.println("Creating Voxcontracts Using ServiceRequestNo");
                     //select AccountId,ServiceRequestNo from AnnuityBilling where  ProductId <>'1888' and ( ServiceRequestNo<>'')
-                    bigBluePreparedStatement = bigBlueConnection.prepareStatement("select * from AnnuityBilling where ServiceRequestNo<>'' and ProductId<>'1888'");
+                    bigBluePreparedStatement = bigBlueConnection.prepareStatement("select * from AnnuityBilling where ServiceRequestNo <> '' and ProductId <> '1888'");
                     bigBlueResultSet = bigBluePreparedStatement.executeQuery();
                     createVoxcontractPerAccountIdServiceRequestNo();
                 } else if (criteria.equals("c")) {
@@ -176,11 +191,40 @@ public class AnnuityMigration {
     public void initialiseStatements() {
         System.out.println("Initialising Statements");
         try {
-            voxcontractPreparedStatement = voxzalConnection.prepareStatement("INSERT INTO voxcontract(voxcontract_id,date_ended,date_started,contract_number,account_manager,division,customer_id,original_account_manager,quote_id, voxcontract_info_id)  VALUES(?,?,?,?,?,?,?,?,?,?)");
-            voxcontractProductPreparedStatement = voxzalConnection.prepareStatement("INSERT INTO voxcontract_product(voxcontract_product_id,config_device_info,lob_id,lob_product_id,name,product_code,plan_type,voxcontract_product_package_id)  VALUES(?,?,?,?,?,?,?,?)");
-            voxcontractInfoPreparedStatement = voxzalConnection.prepareStatement("INSERT INTO  voxcontract_info(voxcontract_info_id,expiry_date,note,ticket_number,voxcontract_expiry_type,voxcontract_period,voxcontract_status, voxcontract_type,group_company,reseller,voxcontract_datasource,voxcontract_source,voxcontract_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)");
-            voxcontractItemBillingInfoPreparedStatement = voxzalConnection.prepareStatement("INSERT INTO voxcontract_item_billing_info(billing_info_id,billing_start_date,cancellation,cancelled_date,commisionable_value,core_price,installed_date,is_active,is_billable,is_prorata,lob_price,master_number,note,previous_master_number,salesman_id,selling_price,setup_fee,sold_date,upgrade_date,      upgrade_downgrade,voxcontract_debit_order_day,account_manager_id,cancellation_reason_id,payment_type_id,profit_center_id,region_id,voxcontract_id,voxcontract_product_id)   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-            voxcontractHasProductPreparedStatement = voxzalConnection.prepareStatement("INSERT INTO voxcontract_has_product(voxcontract_id,voxcontract_product_id,billing_info_id)  VALUES(?,?,?)");
+
+
+            voxcontractPreparedStatement = voxzalConnection.prepareStatement("INSERT INTO voxcontract(voxcontract_id,date_ended,date_started,contract_number,account_manager,division,customer_id,original_account_manager,quote_id, voxcontract_info_id)  VALUES (?,?,?,?,?,?,?,?,?,?)");
+            voxcontractProductPreparedStatement = voxzalConnection.prepareStatement("INSERT INTO voxcontract_product(voxcontract_product_id,config_device_info,lob_id,lob_product_id,name,product_code,plan_type,voxcontract_product_package_id)  VALUES (?,?,?,?,?,?,?,?)");
+            voxcontractInfoPreparedStatement = voxzalConnection.prepareStatement("INSERT INTO  voxcontract_info(voxcontract_info_id,expiry_date,note,ticket_number,voxcontract_expiry_type,voxcontract_period,voxcontract_status, voxcontract_type,group_company,reseller,voxcontract_datasource,voxcontract_source,voxcontract_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
+            voxcontractItemBillingInfoPreparedStatement = voxzalConnection.prepareStatement("INSERT INTO voxcontract_item_billing_info(billing_info_id,billing_start_date,cancellation,cancelled_date,commisionable_value,core_price,installed_date,is_active,is_billable,is_prorata,lob_price,master_number,note,previous_master_number,salesman_id,selling_price,setup_fee,sold_date,upgrade_date, upgrade_downgrade,voxcontract_debit_order_day,account_manager_id,cancellation_reason_id,payment_type_id,profit_center_id,region_id,voxcontract_id,voxcontract_product_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+            voxcontractHasProductPreparedStatement = voxzalConnection.prepareStatement("INSERT INTO voxcontract_has_product(voxcontract_id,voxcontract_product_id,billing_info_id) VALUES (?,?,?)");
+
+            bigBlueCustomerPreparedStatement = bigBlueConnection.prepareStatement("select BrilliantAccountNumber,CompanyName from Account where AccountID=?");
+            bigBlueCancelReasonPreparedStatement = bigBlueConnection.prepareStatement("select CancellationReason from CancellationReason where CancellationReasonID=?");
+            bigBlueSalesStaffPreparedStatement = bigBlueConnection.prepareStatement("select Code from SalesStaff where StaffID=?");
+            bigBlueSourceBusinessPreparedStatement = bigBlueConnection.prepareStatement("select SourceOfBusiness from Source where SourceID=?");
+            bigBluePaymentPreparedStatement = bigBlueConnection.prepareStatement("select PaymentOption from PaymentOption where PaymentOptionID=?");
+            bigBlueProfiitPreparedStatement = bigBlueConnection.prepareStatement("select ProfitCentreCode from ProfitCentre where ProfitCentreID=?");
+            bigBlueRegionPreparedStatement = bigBlueConnection.prepareStatement("select Region from Region where RegionID=?");
+            bigBlueProductPreparedStatement = bigBlueConnection.prepareStatement("select ProductCode from Product where ProductID=?");
+
+            bigBlueDataSourceDataPreparedStatement = bigBlueConnection.prepareStatement("select SourceOfData from SourceDatabase where SourceDatabaseID=?");
+
+
+
+            voxzalCustomerPreparedStatement = voxzalConnection.prepareStatement("select id from customer where pastel_code=?");
+            voxzalCancelPreparedStatement = voxzalConnection.prepareStatement("select cancellation_reason_id from cancellation_reason where cancellation_reason=?");
+            voxzalUsrPreparedStatement = voxzalConnection.prepareStatement("select id from usr where usr_name=?");
+            voxzalDataSourcePreparedStatement = voxzalConnection.prepareStatement("select id from voxcontract_datasource where name=?");
+            voxzalSourcePreparedStatement = voxzalConnection.prepareStatement("select SourceID from voxcontract_source where SourceOfBusiness=?");
+            voxzalPaymentPreparedStatement = voxzalConnection.prepareStatement("select id from payment_type where type_name=?");
+            voxzalProfitPreparedStatement = voxzalConnection.prepareStatement("select profit_center_id from profit_center where name like ?");
+            voxzalRegionPreparedStatement = voxzalConnection.prepareStatement("select region_id from region where name=?");
+            voxzalReadGlobalCustomerPreparedStatement = voxzalConnection.prepareStatement("select customer_id from global_customer where account_code=?");
+            voxzalLobPreparedStatement = voxzalConnection.prepareStatement("select base_product_id,lob_id,lob_product_id,name from lob_product where lob_product_code=?");
+            voxzalPlanTypePreparedStatement = voxzalConnection.prepareStatement("select plan_type_id from base_product where base_product_id=?");
+
+
         } catch (SQLException ex) {
             Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
             errorLogger.info("SQLException initialising statements ");
@@ -196,17 +240,17 @@ public class AnnuityMigration {
         String code = null;
         if (salesmanId != 0) {
             try {
-                bigBlueTempPreparedStatement = bigBlueConnection.prepareStatement("select Code from SalesStaff where StaffID=?");
-                bigBlueTempPreparedStatement.setInt(1, salesmanId);
-                bigBlueTempResultSet = bigBlueTempPreparedStatement.executeQuery();
+
+                bigBlueSalesStaffPreparedStatement.setInt(1, salesmanId);
+                bigBlueTempResultSet = bigBlueSalesStaffPreparedStatement.executeQuery();
                 bigBlueTempResultSet.next();
                 code = bigBlueTempResultSet.getString("Code");
                 if (code != null) {
                     code = code.equals("allie-sue") ? "AllieSue" : code;
                     code = code.equals("pauld") ? "jeand" : code;
-                    voxzalTempPreparedStatement = voxzalConnection.prepareStatement("select id from usr where usr_name=?");
-                    voxzalTempPreparedStatement.setString(1, code);
-                    voxzalTempResultSet = voxzalTempPreparedStatement.executeQuery();
+
+                    voxzalUsrPreparedStatement.setString(1, code);
+                    voxzalTempResultSet = voxzalUsrPreparedStatement.executeQuery();
                     voxzalTempResultSet.next();
                     usrId = voxzalTempResultSet.getString("id");
                 }
@@ -216,10 +260,7 @@ public class AnnuityMigration {
                 databaseLogger.logError(masterNumberId, voxcontractId, "sales_man_id", salesmanId, 1, "sales_man_id_strace", ex.toString()); //masternumberId,voxontractId,columnValue,columnName,imported,stackTrace
             } finally {
                 close(bigBlueTempResultSet);
-                close(bigBlueTempPreparedStatement);
                 close(voxzalTempResultSet);
-                close(voxzalTempPreparedStatement);
-
             }
         }
         return usrId;
@@ -229,14 +270,13 @@ public class AnnuityMigration {
         String cancellationReason = null;
         if (cancellationReasonId != 0) {
             try {
-                bigBlueTempPreparedStatement = bigBlueConnection.prepareStatement("select CancellationReason from CancellationReason where CancellationReasonID=?");
-                bigBlueTempPreparedStatement.setInt(1, cancellationReasonId);
-                bigBlueTempResultSet = bigBlueTempPreparedStatement.executeQuery();
+                bigBlueCancelReasonPreparedStatement.setInt(1, cancellationReasonId);
+                bigBlueTempResultSet = bigBlueCancelReasonPreparedStatement.executeQuery();
                 bigBlueTempResultSet.next();
                 String cr = bigBlueTempResultSet.getString("CancellationReason");
-                voxzalTempPreparedStatement = voxzalConnection.prepareStatement("select cancellation_reason_id from cancellation_reason where cancellation_reason=?");
-                voxzalTempPreparedStatement.setString(1, cr);
-                voxzalTempResultSet = voxzalTempPreparedStatement.executeQuery();
+
+                voxzalCancelPreparedStatement.setString(1, cr);
+                voxzalTempResultSet = voxzalCancelPreparedStatement.executeQuery();
                 voxzalTempResultSet.next();
                 cancellationReason = voxzalTempResultSet.getString("cancellation_reason_id");
             } catch (SQLException ex) {
@@ -245,10 +285,7 @@ public class AnnuityMigration {
                 databaseLogger.logError(masterNumberId, voxcontractId, "cancellation_reason_id", cancellationReasonId, 1, "cancellation_reason_id_strace", ex.toString());
             } finally {
                 close(bigBlueTempResultSet);
-                close(bigBlueTempPreparedStatement);
                 close(voxzalTempResultSet);
-                close(voxzalTempPreparedStatement);
-
             }
         }
         return cancellationReason;
@@ -259,14 +296,12 @@ public class AnnuityMigration {
         String sourceOfData = null;
         if (sourceDatabaseId != 0) {
             try {
-                bigBlueTempPreparedStatement = bigBlueConnection.prepareStatement("select SourceOfData from SourceDatabase where SourceDatabaseID=?");
-                bigBlueTempPreparedStatement.setInt(1, sourceDatabaseId);
-                bigBlueTempResultSet = bigBlueTempPreparedStatement.executeQuery();
+                bigBlueDataSourceDataPreparedStatement.setInt(1, sourceDatabaseId);
+                bigBlueTempResultSet = bigBlueDataSourceDataPreparedStatement.executeQuery();
                 bigBlueTempResultSet.next();
                 sourceOfData = bigBlueTempResultSet.getString("SourceOfData");
-                voxzalTempPreparedStatement = voxzalConnection.prepareStatement("select id from voxcontract_datasource where name=?");
-                voxzalTempPreparedStatement.setString(1, sourceOfData);
-                voxzalTempResultSet = voxzalTempPreparedStatement.executeQuery();
+                voxzalDataSourcePreparedStatement.setString(1, sourceOfData);
+                voxzalTempResultSet = voxzalDataSourcePreparedStatement.executeQuery();
                 voxzalTempResultSet.next();
                 voxcontractDatasourceId = voxzalTempResultSet.getString("id");
             } catch (SQLException ex) {
@@ -275,10 +310,7 @@ public class AnnuityMigration {
                 databaseLogger.logError(masterNumberId, voxcontractId, "source_database_id", sourceDatabaseId, 1, "source_database_id_strace", ex.toString());
             } finally {
                 close(bigBlueTempResultSet);
-                close(bigBlueTempPreparedStatement);
                 close(voxzalTempResultSet);
-                close(voxzalTempPreparedStatement);
-
             }
         }
         return voxcontractDatasourceId;
@@ -290,14 +322,12 @@ public class AnnuityMigration {
         String sourceOfBusiness = null;
         if (sourceId != 0) {
             try {
-                bigBlueTempPreparedStatement = bigBlueConnection.prepareStatement("select SourceOfBusiness from Source where SourceID=?");
-                bigBlueTempPreparedStatement.setInt(1, sourceId);
-                bigBlueTempResultSet = bigBlueTempPreparedStatement.executeQuery();
+                bigBlueSourceBusinessPreparedStatement.setInt(1, sourceId);
+                bigBlueTempResultSet = bigBlueSourceBusinessPreparedStatement.executeQuery();
                 bigBlueTempResultSet.next();
                 sourceOfBusiness = bigBlueTempResultSet.getString("SourceOfBusiness");
-                voxzalTempPreparedStatement = voxzalConnection.prepareStatement("select SourceID from voxcontract_source where SourceOfBusiness=?");
-                voxzalTempPreparedStatement.setString(1, sourceOfBusiness);
-                voxzalTempResultSet = voxzalTempPreparedStatement.executeQuery();
+                voxzalSourcePreparedStatement.setString(1, sourceOfBusiness);
+                voxzalTempResultSet = voxzalSourcePreparedStatement.executeQuery();
                 voxzalTempResultSet.next();
                 voxcontractSourceId = voxzalTempResultSet.getString("SourceID");
             } catch (SQLException ex) {
@@ -306,10 +336,7 @@ public class AnnuityMigration {
                 databaseLogger.logError(masterNumberId, voxcontractId, "source_id", sourceId, 1, "source_id_strace", ex.toString());
             } finally {
                 close(bigBlueTempResultSet);
-                close(bigBlueTempPreparedStatement);
                 close(voxzalTempResultSet);
-                close(voxzalTempPreparedStatement);
-
             }
         }
         return voxcontractSourceId;
@@ -322,17 +349,16 @@ public class AnnuityMigration {
         String paymentOption = null;
         if (paymentOptionId != 0) {
             try {
-                bigBlueTempPreparedStatement = bigBlueConnection.prepareStatement("select PaymentOption from PaymentOption where PaymentOptionID=?");
-                bigBlueTempPreparedStatement.setInt(1, paymentOptionId);
-                bigBlueTempResultSet = bigBlueTempPreparedStatement.executeQuery();
+                bigBluePaymentPreparedStatement.setInt(1, paymentOptionId);
+                bigBlueTempResultSet = bigBluePaymentPreparedStatement.executeQuery();
                 bigBlueTempResultSet.next();
                 paymentOption = bigBlueTempResultSet.getString("PaymentOption");
                 paymentOption = paymentOption.equals("Credit Cards") ? "Credit Card" : paymentOption;
                 paymentOption = paymentOption.equals("Cheque/EFT") ? "Cheque" : paymentOption;
                 paymentOption = paymentOption.equals("Prepaids") ? "PrePaid" : paymentOption;
-                voxzalTempPreparedStatement = voxzalConnection.prepareStatement("select id from payment_type where type_name=?");
-                voxzalTempPreparedStatement.setString(1, paymentOption);
-                voxzalTempResultSet = voxzalTempPreparedStatement.executeQuery();
+
+                voxzalPaymentPreparedStatement.setString(1, paymentOption);
+                voxzalTempResultSet = voxzalPaymentPreparedStatement.executeQuery();
                 voxzalTempResultSet.next();
                 paymentTypeId = voxzalTempResultSet.getString("id");
             } catch (SQLException ex) {
@@ -341,10 +367,7 @@ public class AnnuityMigration {
                 databaseLogger.logError(masterNumberId, voxcontractId, "payment_option_id", paymentOptionId, 1, "payment_option_id_strace", ex.toString());
             } finally {
                 close(bigBlueTempResultSet);
-                close(bigBlueTempPreparedStatement);
                 close(voxzalTempResultSet);
-                close(voxzalTempPreparedStatement);
-
             }
         }
         return paymentTypeId;
@@ -354,14 +377,12 @@ public class AnnuityMigration {
         String profitCenterId = null;
         if (profitCentreId != 0) {
             try {
-                bigBlueTempPreparedStatement = bigBlueConnection.prepareStatement("select ProfitCentreCode from ProfitCentre where ProfitCentreID=?");
-                bigBlueTempPreparedStatement.setInt(1, profitCentreId);
-                bigBlueTempResultSet = bigBlueTempPreparedStatement.executeQuery();
+                bigBlueProfiitPreparedStatement.setInt(1, profitCentreId);
+                bigBlueTempResultSet = bigBlueProfiitPreparedStatement.executeQuery();
                 bigBlueTempResultSet.next();
                 String profitCentreCode = bigBlueTempResultSet.getString("ProfitCentreCode");
-                voxzalTempPreparedStatement = voxzalConnection.prepareStatement("select profit_center_id from profit_center where name like ?");
-                voxzalTempPreparedStatement.setString(1, profitCentreCode + "%");
-                voxzalTempResultSet = voxzalTempPreparedStatement.executeQuery();
+                voxzalProfitPreparedStatement.setString(1, profitCentreCode + "%");
+                voxzalTempResultSet = voxzalProfitPreparedStatement.executeQuery();
                 voxzalTempResultSet.next();
                 profitCenterId = voxzalTempResultSet.getString("profit_center_id");
             } catch (SQLException ex) {
@@ -370,10 +391,7 @@ public class AnnuityMigration {
                 databaseLogger.logError(masterNumberId, voxcontractId, "profit_center_id", profitCentreId, 1, "profit_center_id_strace", ex.toString());
             } finally {
                 close(bigBlueTempResultSet);
-                close(bigBlueTempPreparedStatement);
                 close(voxzalTempResultSet);
-                close(voxzalTempPreparedStatement);
-
             }
         }
         return profitCenterId;
@@ -384,14 +402,12 @@ public class AnnuityMigration {
         String rid = null;
         if (regionId != 0) {
             try {
-                bigBlueTempPreparedStatement = bigBlueConnection.prepareStatement("select Region from Region where RegionID=?");
-                bigBlueTempPreparedStatement.setInt(1, regionId);
-                bigBlueTempResultSet = bigBlueTempPreparedStatement.executeQuery();
+                bigBlueRegionPreparedStatement.setInt(1, regionId);
+                bigBlueTempResultSet = bigBlueRegionPreparedStatement.executeQuery();
                 bigBlueTempResultSet.next();
                 String region = bigBlueTempResultSet.getString("Region");
-                voxzalTempPreparedStatement = voxzalConnection.prepareStatement("select region_id from region where name=?");
-                voxzalTempPreparedStatement.setString(1, region);
-                voxzalTempResultSet = voxzalTempPreparedStatement.executeQuery();
+                voxzalRegionPreparedStatement.setString(1, region);
+                voxzalTempResultSet = voxzalRegionPreparedStatement.executeQuery();
                 voxzalTempResultSet.next();
                 rid = voxzalTempResultSet.getString("region_id");
             } catch (SQLException ex) {
@@ -400,10 +416,7 @@ public class AnnuityMigration {
                 databaseLogger.logError(masterNumberId, voxcontractId, "region_id", regionId, 1, "region_id_strace", ex.toString());
             } finally {
                 close(bigBlueTempResultSet);
-                close(bigBlueTempPreparedStatement);
                 close(voxzalTempResultSet);
-                close(voxzalTempPreparedStatement);
-
             }
         }
         return rid;
@@ -427,32 +440,30 @@ public class AnnuityMigration {
         String pastelCode = null;
         String companyName = null;
         try {
-            bigBlueTempPreparedStatement = bigBlueConnection.prepareStatement("select BrilliantAccountNumber,CompanyName from Account where AccountID=?");
-            bigBlueTempPreparedStatement.setInt(1, accountId);
-            bigBlueTempResultSet = bigBlueTempPreparedStatement.executeQuery();
+
+            bigBlueCustomerPreparedStatement.setInt(1, accountId);
+            bigBlueTempResultSet = bigBlueCustomerPreparedStatement.executeQuery();
             bigBlueTempResultSet.next();
             pastelCode = bigBlueTempResultSet.getString("BrilliantAccountNumber");
             companyName = bigBlueTempResultSet.getString("CompanyName");
-            voxzalTempPreparedStatement = voxzalConnection.prepareStatement("select customer_id from global_customer where account_code=?");
-            voxzalTempPreparedStatement.setString(1, pastelCode);
-            voxzalTempResultSet = voxzalTempPreparedStatement.executeQuery();
-            //if(voxzalTempResultSet.last())
+            System.out.println("have pastel code" + pastelCode);
+            System.out.println("have company name" + companyName);
+            voxzalReadGlobalCustomerPreparedStatement.setString(1, pastelCode);
+            voxzalTempResultSet = voxzalReadGlobalCustomerPreparedStatement.executeQuery();
             voxzalTempResultSet.next();
             if (voxzalTempResultSet.isFirst()) {
                 customerId = voxzalTempResultSet.getString("customer_id");
             } else {
                 System.out.println("No record for :" + pastelCode);
-                voxzalTempPreparedStatement = voxzalConnection.prepareStatement("select id from customer where pastel_code=?");
-                voxzalTempPreparedStatement.setString(1, pastelCode);
-                voxzalTempResultSet = voxzalTempPreparedStatement.executeQuery();
+                voxzalCustomerPreparedStatement.setString(1, pastelCode);
+                voxzalTempResultSet = voxzalCustomerPreparedStatement.executeQuery();
                 //if(voxzalTempResultSet.last())
                 voxzalTempResultSet.next();
                 if (voxzalTempResultSet.isFirst()) {
                     // if there is a matching customer search for the global customer and update it
                     customerId = voxzalTempResultSet.getString("id");
-                    voxzalTempPreparedStatement = voxzalConnection.prepareStatement("select customer_id from global_customer where customer_id=?");
-                    voxzalTempPreparedStatement.setString(1, customerId);
-                    voxzalTempResultSet = voxzalTempPreparedStatement.executeQuery();
+                    voxzalReadGlobalCustomerPreparedStatement.setString(1, customerId);
+                    voxzalTempResultSet = voxzalReadGlobalCustomerPreparedStatement.executeQuery();
                     voxzalTempResultSet.next();
                     if (voxzalTempResultSet.isFirst()) {
                         //if global customer exists update the global customer
@@ -474,10 +485,8 @@ public class AnnuityMigration {
             errorLogger.info("SQLException  in getting Global Customer : " + accountId + " for MasterNumber " + masterNumberId);
             databaseLogger.logError(masterNumberId, voxcontractId, "account_id", accountId, 1, "account_id_strace", ex.toString());
         } finally {
-            close(bigBlueTempResultSet);
-            close(bigBlueTempPreparedStatement);
-            close(voxzalTempResultSet);
-            close(voxzalTempPreparedStatement);
+//            close(bigBlueTempResultSet);
+//            close(voxzalTempResultSet);
         }
         if (customerId == null) {
             System.out.println(" ***** Customer Id is Null ****** for MasterNumberId " + masterNumberId);
@@ -658,14 +667,14 @@ public class AnnuityMigration {
     private void setVoxcontractProductPreparedStatement(Integer productId) {
         String productCode = null;
         try {
-            bigBlueTempPreparedStatement = bigBlueConnection.prepareStatement("select ProductCode from Product where ProductID=?");
-            bigBlueTempPreparedStatement.setInt(1, productId);
-            bigBlueTempResultSet = bigBlueTempPreparedStatement.executeQuery();
+
+            bigBlueProductPreparedStatement.setInt(1, productId);
+            bigBlueTempResultSet = bigBlueProductPreparedStatement.executeQuery();
             bigBlueTempResultSet.next();
             productCode = bigBlueTempResultSet.getString("ProductCode");
-            voxzalTempPreparedStatement = voxzalConnection.prepareStatement("select base_product_id,lob_id,lob_product_id,name from lob_product where lob_product_code=?");
-            voxzalTempPreparedStatement.setString(1, productCode);
-            voxzalTempResultSet = voxzalTempPreparedStatement.executeQuery();
+
+            voxzalLobPreparedStatement.setString(1, productCode);
+            voxzalTempResultSet = voxzalLobPreparedStatement.executeQuery();
             voxzalTempResultSet.next();
             //if the resultset is empty dont create a base product and lob product
             // set ignoreAnnuity to true
@@ -685,9 +694,8 @@ public class AnnuityMigration {
             String lobId = voxzalTempResultSet.getString("lob_id");
             String lobProductId = voxzalTempResultSet.getString("lob_product_id");
             String name = voxzalTempResultSet.getString("name");
-            voxzalTempPreparedStatement = voxzalConnection.prepareStatement("select plan_type_id from base_product where base_product_id=?");
-            voxzalTempPreparedStatement.setString(1, baseProductId);
-            voxzalTempResultSet = voxzalTempPreparedStatement.executeQuery();
+            voxzalPlanTypePreparedStatement.setString(1, baseProductId);
+            voxzalTempResultSet = voxzalPlanTypePreparedStatement.executeQuery();
             voxzalTempResultSet.next();
             String planType = voxzalTempResultSet.getString("plan_type_id");
             //voxcontractProductPreparedStatement.setString(1, getId()); //voxcontractract_product_id
@@ -699,25 +707,23 @@ public class AnnuityMigration {
             voxcontractProductPreparedStatement.setString(7, planType); //plan_type
             voxcontractProductPreparedStatement.setString(8, null); //voxcontract_product_package_id
             voxcontractProductPreparedStatement.addBatch();
+
         } catch (SQLException ex) {
             Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, productCode, ex);
         } finally {
             close(bigBlueTempResultSet);
-            close(bigBlueTempPreparedStatement);
             close(voxzalTempResultSet);
-            close(voxzalTempPreparedStatement);
-
         }
     }
 
-    private void setVoxcontractInfoPreparedStatement(ResultSet resultSet) {
+    private void setVoxcontractInfoPreparedStatement(ResultSet resultSet, String globalCustomerId) {
         try {
             masterNumberId = resultSet.getInt("masternumberid");
             voxcontractPreparedStatement.setString(1, voxcontractId); //voxcontract_id
             voxcontractPreparedStatement.setDate(2, null); //date_ended
             voxcontractPreparedStatement.setString(4, null);//ticket_number
             voxcontractPreparedStatement.setString(6, null);// division
-            voxcontractPreparedStatement.setString(7, getGlobalCustomer(resultSet.getInt("AccountID"))); //customer_id
+            voxcontractPreparedStatement.setString(7, globalCustomerId); //customer_id
             voxcontractPreparedStatement.setString(9, null); //quote_id
             voxcontractPreparedStatement.setString(10, voxcontractInfoId); //voxcontract_info
             voxcontractPreparedStatement.setDate(3, resultSet.getDate("datesold")); //date_started or is it impdate
@@ -739,6 +745,7 @@ public class AnnuityMigration {
             voxcontractInfoPreparedStatement.setString(12, getVoxcontractSource(resultSet.getInt("sourceid"))); //voxcontract_source
             voxcontractInfoPreparedStatement.setString(13, voxcontractId); //voxcontract_id
             voxcontractInfoPreparedStatement.addBatch();
+
         } catch (SQLException ex) {
             //log and skip
             Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
@@ -809,13 +816,72 @@ public class AnnuityMigration {
     }
 
     private void executeBatches() {
+
+
+
         System.out.println("Executing Batches : ");
+
+
+        System.out.println("close all prepared read statements and free resources");
+
+        close(bigBluePreparedStatement);
+        close(bigBlueCustomerPreparedStatement);
+        close(bigBlueCancelReasonPreparedStatement);
+        close(bigBlueSalesStaffPreparedStatement);
+        close(bigBlueDataSourceDataPreparedStatement);
+        close(bigBluePaymentPreparedStatement);
+        close(bigBlueProfiitPreparedStatement);
+        close(bigBlueRegionPreparedStatement);
+        close(bigBlueProductPreparedStatement);
+
+        close(voxzalCustomerPreparedStatement);
+        close(voxzalCancelPreparedStatement);
+        close(voxzalUsrPreparedStatement);
+        close(voxzalDataSourcePreparedStatement);
+        close(voxzalSourcePreparedStatement);
+        close(voxzalPaymentPreparedStatement);
+        close(voxzalProfitPreparedStatement);
+        close(voxzalRegionPreparedStatement);
+        close(voxzalGlobalCustomerPreparedStatement);
+        close(voxzalLobPreparedStatement);
+        close(voxzalPlanTypePreparedStatement);
+        close(voxzalReadGlobalCustomerPreparedStatement);
+
         try {
-            voxcontractPreparedStatement.executeBatch();
-            voxcontractInfoPreparedStatement.executeBatch();
-            voxcontractItemBillingInfoPreparedStatement.executeBatch();
-            voxcontractProductPreparedStatement.executeBatch();
-            voxcontractHasProductPreparedStatement.executeBatch();
+            if (bigBlueConnection != null) {
+                bigBlueConnection.close();
+            }
+        } catch (Exception e) {
+
+        }
+
+
+
+
+        try {
+            int[] res;
+
+            long start = System.currentTimeMillis();
+
+            res = voxcontractPreparedStatement.executeBatch();
+            System.out.println("time to execute voxcontractPreparedStatement batch " + (System.currentTimeMillis() - start) + "ms. Inserts:" + res.length);
+
+            start = System.currentTimeMillis();
+            res = voxcontractInfoPreparedStatement.executeBatch();
+            System.out.println("time to execute voxcontractInfoPreparedStatement batch " + (System.currentTimeMillis() - start) + "ms. Inserts:" + res.length);
+
+
+            start = System.currentTimeMillis();
+            res = voxcontractItemBillingInfoPreparedStatement.executeBatch();
+            System.out.println("time to execute voxcontractItemBillingInfoPreparedStatement batch " + (System.currentTimeMillis() - start) + "ms. Inserts:" + res.length);
+
+            start = System.currentTimeMillis();
+            res = voxcontractProductPreparedStatement.executeBatch();
+            System.out.println("time to execute voxcontractProductPreparedStatement batch " + (System.currentTimeMillis() - start) + "ms. Inserts:" + res.length);
+
+            start = System.currentTimeMillis();
+            res = voxcontractHasProductPreparedStatement.executeBatch();
+            System.out.println("time to execute voxcontractHasProductPreparedStatement batch " + (System.currentTimeMillis() - start) + "ms. Inserts:" + res.length);
         } catch (SQLException ex) {
             Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -842,54 +908,67 @@ public class AnnuityMigration {
     }
 
     public void createVoxcontractPerAccountIdProductId() {
+        System.out.println("createVoxcontractPerAccountIdProductId start");
+        long start = System.currentTimeMillis();
+
         List<Integer> accountsList = new ArrayList<Integer>();
         Set<Integer> accountsSet = new HashSet<Integer>();
 
-
         if (bigBlueResultSet != null) {
             try {
+                long startAccountList = System.currentTimeMillis();
                 while (bigBlueResultSet.next()) {
                     Integer acc = bigBlueResultSet.getInt("AccountID");
-
                     accountsList.add(acc);
                     accountsSet.add(acc);
                 }
                 System.out.println("\nBefore List size : " + accountsList.size() + "\t Set size " + accountsSet.size());
-                bigBlueResultSet.beforeFirst();
+                System.out.println("time to make account set/list " + (System.currentTimeMillis() - startAccountList) + " ms");
+
+                //bigBlueResultSet.beforeFirst(); //we can just close this now
+                bigBlueResultSet.close();
+                System.out.println("we have closed the bigblue result set");
+
                 int voxcontractCount = 0;
+                Integer aid = null;
+                int count = 0;
+                bigBlueSubQueryPreparedStatement = bigBlueConnection.prepareStatement("select * from AnnuityBilling where ProductId='1888' and AccountID=?");
                 for (Integer account : accountsSet) {
                     voxcontractCount++;
                     voxcontractId = getId();
                     voxcontractInfoId = getId();
 
-                    bigBlueSubQueryPreparedStatement = bigBlueConnection.prepareStatement("select * from AnnuityBilling where ProductId='1888' and AccountID=?");
+
                     bigBlueSubQueryPreparedStatement.setInt(1, account);
                     bigBlueSubQueryResultSet = bigBlueSubQueryPreparedStatement.executeQuery();
-                    int count = 0;
+                    count = 0;
                     bigBlueSubQueryResultSet.last();
-                    Integer aid = bigBlueSubQueryResultSet.getInt("accountid");
+                    aid = bigBlueSubQueryResultSet.getInt("accountid");
                     masterNumberId = bigBlueSubQueryResultSet.getInt("masternumberid");
-                    if (getGlobalCustomer(aid) == null) {
+
+                    String globalCustomerId = getGlobalCustomer(aid);
+                    if (globalCustomerId == null) {
                         System.out.println("Skipping an Annuity " + masterNumberId);
                         databaseLogger.logError(masterNumberId, voxcontractId, "account_id", aid, 0, "account_id_strace", "non existent account");
                         continue;
                     }
-                    setVoxcontractInfoPreparedStatement(bigBlueSubQueryResultSet);
+                    setVoxcontractInfoPreparedStatement(bigBlueSubQueryResultSet, globalCustomerId);
+
                     bigBlueSubQueryResultSet.beforeFirst();
                     while (bigBlueSubQueryResultSet.next()) {
                         count++;
-
                         setPreparedStatementValues(bigBlueSubQueryResultSet);
                         ignoreAnnuity = false;
                     }
-                    bigBlueSubQueryResultSet.close();
-                    bigBlueSubQueryPreparedStatement.close();
+//                    bigBlueSubQueryResultSet.close();
+//                    bigBlueSubQueryPreparedStatement.close();
 
-                    //executeBatches();
+                    // executeBatches();
 //                    if (voxcontractCount == 500) {
 //                        break;
 //                    }
                 }// end of for loop
+                //bigBlueConnection.close();
 
             } catch (SQLException ex) {
                 Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
@@ -898,6 +977,7 @@ public class AnnuityMigration {
 
         }
         System.out.println("After List size : " + accountsList.size() + "\tSet size : " + accountsSet.size());
+        System.out.println("Time to createVoxcontractPerAccountIdProductId" + (System.currentTimeMillis() - start) + "ms");
 
 
     }
@@ -945,25 +1025,30 @@ public class AnnuityMigration {
                 }
 
                 System.out.println("\nList size : " + list.size() + "\t Set size " + accountServiceRequestNoPairs.size());
-                bigBlueResultSet.beforeFirst();
+                //bigBlueResultSet.beforeFirst();
+                bigBlueResultSet.close();
                 int voxcontractCount = 0;
+
+                bigBlueSubQueryPreparedStatement = bigBlueConnection.prepareStatement("select * from AnnuityBilling where ProductId<>'1888' and ServiceRequestNo=? and AccountID=?");
+
                 for (AccountServiceRequestNoPair asrnp : iteratingBatch) {
                     voxcontractCount++;
                     voxcontractId = getId();
                     voxcontractInfoId = getId();
 
-                    bigBlueSubQueryPreparedStatement = bigBlueConnection.prepareStatement("select * from AnnuityBilling where ProductId<>'1888' and ServiceRequestNo=? and AccountID=?");
+                    // take out loop! bigBlueSubQueryPreparedStatement = bigBlueConnection.prepareStatement("select * from AnnuityBilling where ProductId<>'1888' and ServiceRequestNo=? and AccountID=?");
                     bigBlueSubQueryPreparedStatement.setString(1, asrnp.getServiceRequestNo()); //servicerequestno
                     bigBlueSubQueryPreparedStatement.setString(2, asrnp.getAccountId()); // accountid
                     bigBlueSubQueryResultSet = bigBlueSubQueryPreparedStatement.executeQuery();
                     int count = 0;
                     bigBlueSubQueryResultSet.last();
-                    if (getGlobalCustomer(bigBlueSubQueryResultSet.getInt("accountid")) == null) {
+                    String globalCustomerId = getGlobalCustomer(bigBlueSubQueryResultSet.getInt("accountid"));  //lookup once only
+                    if (globalCustomerId == null) {
                         System.out.println("Skipping an Annuity " + masterNumberId);
                         masterNumberId = bigBlueSubQueryResultSet.getInt("masternummberid");
                         continue;
                     }
-                    setVoxcontractInfoPreparedStatement(bigBlueSubQueryResultSet);
+                    setVoxcontractInfoPreparedStatement(bigBlueSubQueryResultSet, globalCustomerId);
                     bigBlueSubQueryResultSet.beforeFirst();
                     while (bigBlueSubQueryResultSet.next()) {
                         count++;
@@ -972,11 +1057,10 @@ public class AnnuityMigration {
                         ignoreAnnuity = false;
                     }
                     bigBlueSubQueryResultSet.close();
-                    bigBlueSubQueryPreparedStatement.close();
-//                    if (voxcontractCount == 100) {
-//                        break;
-//                    }
-                }// end of for loop
+                }
+                bigBlueSubQueryPreparedStatement.close();
+                bigBlueConnection.close();
+                executeBatches();
             } catch (SQLException ex) {
                 Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
             }
@@ -1030,12 +1114,14 @@ public class AnnuityMigration {
                     bigBlueSubQueryResultSet = bigBlueSubQueryPreparedStatement.executeQuery();
                     int count = 0;
                     bigBlueSubQueryResultSet.last();
-                    if (getGlobalCustomer(bigBlueSubQueryResultSet.getInt("accountid")) == null) {
+
+                    String globalCustomerId = getGlobalCustomer(bigBlueSubQueryResultSet.getInt("accountid"));
+                    if (globalCustomerId == null) {
                         System.out.println("Skipping an Annuity " + masterNumberId);
                         masterNumberId = bigBlueSubQueryResultSet.getInt("masternummberid");
                         continue;
                     }
-                    setVoxcontractInfoPreparedStatement(bigBlueSubQueryResultSet);
+                    setVoxcontractInfoPreparedStatement(bigBlueSubQueryResultSet, globalCustomerId);
                     bigBlueSubQueryResultSet.beforeFirst();
                     while (bigBlueSubQueryResultSet.next()) {
                         count++;
