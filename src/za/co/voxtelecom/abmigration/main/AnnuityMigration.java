@@ -81,8 +81,8 @@ public class AnnuityMigration {
     static {
         System.out.println("Setting up loggers");
         try {
-            errorHandler = new FileHandler("/home/pault/Desktop/errors.log", true);
-            importHandler = new FileHandler("/home/pault/Desktop/imports.log", true);
+            errorHandler = new FileHandler("/home/khaya/Desktop/errors.log", true);
+            importHandler = new FileHandler("/home/khaya/Desktop/imports.log", true);
             errorHandler.setFormatter(new SimpleFormatter());
             importHandler.setFormatter(new SimpleFormatter());
 
