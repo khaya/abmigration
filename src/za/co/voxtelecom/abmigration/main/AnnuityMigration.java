@@ -123,19 +123,20 @@ public class AnnuityMigration {
             if (am.batchNumber.equals("all")) {
                 am.batchNumber = "1";
                 am.getAnnuities(args[0]);
-                 am.executeBatches();
-                 am.batchNumber = "2";
+                am.executeBatches();
+                am.batchNumber = "2";
                 am.getAnnuities(args[0]);
-                 am.executeBatches();
-                 am.batchNumber = "3";
+                am.executeBatches();
+                am.batchNumber = "3";
                 am.getAnnuities(args[0]);
-                 am.executeBatches();
+                am.executeBatches();
 
             } else {
 
-            am.getAnnuities(args[0]);
+                am.getAnnuities(args[0]);
 
-            am.executeBatches();}
+                am.executeBatches();
+            }
         }
     }
 
@@ -373,6 +374,7 @@ public class AnnuityMigration {
                 paymentOption = paymentOption.equals("Credit Cards") ? "Credit Card" : paymentOption;
                 paymentOption = paymentOption.equals("Cheque/EFT") ? "Cheque" : paymentOption;
                 paymentOption = paymentOption.equals("Prepaids") ? "PrePaid" : paymentOption;
+                paymentOption = paymentOption.equals("Prepaid") ? "PrePaid" : paymentOption;
 
                 voxzalPaymentPreparedStatement.setString(1, paymentOption);
                 voxzalTempResultSet = voxzalPaymentPreparedStatement.executeQuery();
@@ -567,9 +569,9 @@ public class AnnuityMigration {
         databaseLogger.logImport(masterNumberId, customerId, accountCode, customerName, accountId, "update");
         try {
             voxzalGlobalCustomerPreparedStatement = voxzalConnection.prepareStatement("update global_customer set account_code=?,customer_name=? where customer_id=?");
-            voxzalGlobalCustomerPreparedStatement.setString(1, customerId);
+            voxzalGlobalCustomerPreparedStatement.setString(1, accountCode);
             voxzalGlobalCustomerPreparedStatement.setString(2, customerName);
-            voxzalGlobalCustomerPreparedStatement.setString(3, accountCode);
+            voxzalGlobalCustomerPreparedStatement.setString(3, customerId);
             voxzalGlobalCustomerPreparedStatement.executeUpdate();
         } catch (SQLException ex) {
             Logger.getLogger(AnnuityMigration.class.getName()).log(Level.SEVERE, null, ex);
@@ -787,7 +789,7 @@ public class AnnuityMigration {
             if (!ignoreAnnuity) {
                 //setting voxcontractItemBillingInfo values
                 voxcontractItemBillingInfoPreparedStatement.setString(1, voxcontractItemBillingInfoId); // billing_info_id
-                voxcontractItemBillingInfoPreparedStatement.setDate(2, null); //billing_start_date
+                voxcontractItemBillingInfoPreparedStatement.setDate(2, resultSet.getDate("datesold")); //billing_start_date
                 voxcontractItemBillingInfoPreparedStatement.setBoolean(3, getBoolean(resultSet.getString("cancellation"))); //cancellation
                 voxcontractItemBillingInfoPreparedStatement.setDate(4, resultSet.getDate("cancellationdate")); //cancellation_date
                 voxcontractItemBillingInfoPreparedStatement.setDouble(5, resultSet.getDouble("costprice")); //commisionable_value
@@ -870,7 +872,6 @@ public class AnnuityMigration {
                 bigBlueConnection.close();
             }
         } catch (Exception e) {
-
         }
 
 
@@ -982,7 +983,7 @@ public class AnnuityMigration {
 //                    bigBlueSubQueryPreparedStatement.close();
 
                     // executeBatches();
-//                    if (voxcontractCount == 500) {
+//                    if (voxcontractCount == 10) {
 //                        break;
 //                    }
                 }// end of for loop
@@ -1007,6 +1008,7 @@ public class AnnuityMigration {
         Set<AccountServiceRequestNoPair> secondBatch = new HashSet<AccountServiceRequestNoPair>();
         Set<AccountServiceRequestNoPair> thirdBatch = new HashSet<AccountServiceRequestNoPair>();
         Set<AccountServiceRequestNoPair> fourthBatch = new HashSet<AccountServiceRequestNoPair>();
+        Set<AccountServiceRequestNoPair> fifthBatch = new HashSet<AccountServiceRequestNoPair>();
         Set<AccountServiceRequestNoPair> iteratingBatch = new HashSet<AccountServiceRequestNoPair>();
         if (bigBlueResultSet != null) {
             int c = 0;
@@ -1023,24 +1025,30 @@ public class AnnuityMigration {
                         secondBatch.add(pair);
                     } else if (c <= 24000) {
                         thirdBatch.add(pair);
-                    } else {
+                    } else if (c <= 28000) {
                         fourthBatch.add(pair);
+                    } else {
+                        fifthBatch.add(pair);
                     }
                     list.add(pair);
                 }
                 if (batchNumber.equals("1")) {
-                    System.out.println("Iterating with firstHalf");
+                    System.out.println("Iterating with first batch");
                     iteratingBatch = firstBatch;
                 } else if (batchNumber.equals("2")) {
-                    System.out.println("Iterating with secondHalf");
+                    System.out.println("Iterating with second batch");
                     iteratingBatch = secondBatch;
                 } else if (batchNumber.equals("3")) {
-                    System.out.println("Iterating with secondHalf");
+                    System.out.println("Iterating with third batch");
                     iteratingBatch = thirdBatch;
-                } else {
-                    System.out.println("Iterating with third set");
+                } else if (batchNumber.equals("4")) {
+                    System.out.println("Iterating with fourth batch");
                     iteratingBatch = fourthBatch;
+                } else {
+                    System.out.println("Iterating with fifth batch");
+                    iteratingBatch = fifthBatch;
                 }
+                System.out.println("Expected # of contracts : " + iteratingBatch.size());
 
                 System.out.println("\nList size : " + list.size() + "\t Set size " + accountServiceRequestNoPairs.size());
                 //bigBlueResultSet.beforeFirst();
@@ -1060,7 +1068,9 @@ public class AnnuityMigration {
                     bigBlueSubQueryResultSet = bigBlueSubQueryPreparedStatement.executeQuery();
                     int count = 0;
                     bigBlueSubQueryResultSet.last();
+                    masterNumberId = bigBlueSubQueryResultSet.getInt("masternumberid");
                     String globalCustomerId = getGlobalCustomer(bigBlueSubQueryResultSet.getInt("accountid"));  //lookup once only
+
                     if (globalCustomerId == null) {
                         System.out.println("Skipping an Annuity " + masterNumberId);
                         masterNumberId = bigBlueSubQueryResultSet.getInt("masternummberid");
@@ -1110,10 +1120,10 @@ public class AnnuityMigration {
                     list.add(pair);
                 }
                 if (batchNumber.equals("1")) {
-                    System.out.println("Iterating with firstHalf");
+                    System.out.println("Iterating with first batch");
                     iteratingBatch = firstBatch;
                 } else {
-                    System.out.println("Iterating with secondHalf");
+                    System.out.println("Iterating with second batch");
                     iteratingBatch = secondBatch;
                 }
 
@@ -1131,11 +1141,11 @@ public class AnnuityMigration {
                     bigBlueSubQueryResultSet = bigBlueSubQueryPreparedStatement.executeQuery();
                     int count = 0;
                     bigBlueSubQueryResultSet.last();
-
+                    masterNumberId = bigBlueSubQueryResultSet.getInt("masternumberid");
                     String globalCustomerId = getGlobalCustomer(bigBlueSubQueryResultSet.getInt("accountid"));
                     if (globalCustomerId == null) {
                         System.out.println("Skipping an Annuity " + masterNumberId);
-                        masterNumberId = bigBlueSubQueryResultSet.getInt("masternummberid");
+                        masterNumberId = bigBlueSubQueryResultSet.getInt("masternumberid");
                         continue;
                     }
                     setVoxcontractInfoPreparedStatement(bigBlueSubQueryResultSet, globalCustomerId);
